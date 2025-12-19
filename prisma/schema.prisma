@@ -1,0 +1,399 @@
+// This is your Prisma schema file
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  OWNER
+  EDITOR
+  VIEWER
+}
+
+enum FeatureStatus {
+  IDEA
+  PLANNED
+  IN_PROGRESS
+  IMPLEMENTED
+  ARCHIVED
+}
+
+enum PRDStatus {
+  DRAFT
+  READY_FOR_BUILD
+  IN_PROGRESS
+  IMPLEMENTED
+  OUTDATED
+}
+
+enum TaskStatus {
+  BACKLOG
+  TODO
+  IN_PROGRESS
+  DONE
+}
+
+enum SeverityLevel {
+  CRITICAL
+  HIGH
+  MEDIUM
+  LOW
+  INFO
+}
+
+enum VulnerabilityType {
+  DEPENDENCY
+  CODE_INJECTION
+  XSS
+  SQL_INJECTION
+  PATH_TRAVERSAL
+  INSECURE_DESERIALIZATION
+  AUTHENTICATION
+  AUTHORIZATION
+  CRYPTOGRAPHY
+  SECRETS_EXPOSURE
+  MISCONFIGURATION
+  SUPPLY_CHAIN
+  OTHER
+}
+
+enum SecurityStatus {
+  PENDING
+  SCANNING
+  COMPLETED
+  FAILED
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  emailVerified DateTime?
+  name          String?
+  image         String?
+  password      String?
+  role          Role      @default(OWNER)
+
+  projects      Project[]
+  accounts      Account[]
+  sessions      Session[]
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@map("users")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+model Project {
+  id          String    @id @default(cuid())
+  name        String
+  description String?
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  repos       Repo[]
+  features    Feature[]
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@map("projects")
+}
+
+model Repo {
+  id              String    @id @default(cuid())
+  projectId       String
+  project         Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  githubUrl       String
+  githubRepoId    String?
+  branch          String    @default("main")
+  accessToken     String?   // Encrypted GitHub PAT
+
+  // Analysis results
+  framework       String?
+  language        String?
+  lastIngestedAt  DateTime?
+  lastCommitSha   String?
+  knowledgeBase   Json?     // Structured analysis of codebase
+
+  // Security
+  securityReports SecurityReport[]
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@map("repos")
+}
+
+model Feature {
+  id            String         @id @default(cuid())
+  projectId     String
+  project       Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  name          String
+  description   String         @db.Text
+  mindmapData   Json?          // React Flow mindmap nodes/edges
+  domain        String?        // e.g., "Auth", "Billing", "Dashboard"
+
+  status        FeatureStatus  @default(IDEA)
+  prds          PRD[]
+
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@map("features")
+}
+
+model PRD {
+  id                  String     @id @default(cuid())
+  featureId           String
+  feature             Feature    @relation(fields: [featureId], references: [id], onDelete: Cascade)
+
+  version             Int        @default(1)
+  status              PRDStatus  @default(DRAFT)
+
+  // Core content
+  problemStatement    String     @db.Text
+  userStory           String     @db.Text
+  userFlows           Json[]     // Array of flow descriptions
+
+  // Technical specs
+  routes              Json[]     // {path, method, params, response}
+  models              Json[]     // {name, fields, relationships}
+  components          Json[]     // {name, props, location}
+  filePaths           String[]   // Expected file changes
+
+  // Requirements
+  acceptanceCriteria  String[]
+  edgeCases           String[]
+  dependencies        String[]   // Other PRDs or features this depends on
+
+  // AI export
+  exportPrompt        String?    @db.Text  // Optimized prompt for AI tools
+
+  tasks               Task[]
+
+  createdAt           DateTime   @default(now())
+  updatedAt           DateTime   @updatedAt
+
+  @@unique([featureId, version])
+  @@map("prds")
+}
+
+model Task {
+  id          String      @id @default(cuid())
+  prdId       String
+  prd         PRD         @relation(fields: [prdId], references: [id], onDelete: Cascade)
+
+  title       String
+  description String?     @db.Text
+  status      TaskStatus  @default(BACKLOG)
+  order       Int         @default(0)
+
+  githubIssueId String?   // Optional link to GitHub issue
+
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@map("tasks")
+}
+
+model DriftDetection {
+  id            String   @id @default(cuid())
+  projectId     String
+  prdId         String
+
+  detectedAt    DateTime @default(now())
+  commitSha     String
+
+  // Analysis results
+  implemented   Json[]   // Features/routes/models that match PRD
+  partial       Json[]   // Partially implemented items
+  diverged      Json[]   // Items that don't match PRD
+  missing       Json[]   // PRD items not found in code
+
+  resolved      Boolean  @default(false)
+
+  @@map("drift_detections")
+}
+
+model SecurityReport {
+  id                String          @id @default(cuid())
+  repoId            String
+  repo              Repo            @relation(fields: [repoId], references: [id], onDelete: Cascade)
+
+  commitSha         String
+  scanDate          DateTime        @default(now())
+  status            SecurityStatus  @default(PENDING)
+
+  // Summary
+  totalVulnerabilities    Int       @default(0)
+  criticalCount           Int       @default(0)
+  highCount               Int       @default(0)
+  mediumCount             Int       @default(0)
+  lowCount                Int       @default(0)
+
+  // Overall risk score (0-100)
+  riskScore               Int       @default(0)
+
+  // Scan results
+  vulnerabilities         Vulnerability[]
+  dependencyRisks         DependencyRisk[]
+  recommendations         SecurityRecommendation[]
+
+  // Metadata
+  scanDuration            Int?      // milliseconds
+  errorMessage            String?   @db.Text
+
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+
+  @@map("security_reports")
+}
+
+model Vulnerability {
+  id                String             @id @default(cuid())
+  securityReportId  String
+  securityReport    SecurityReport     @relation(fields: [securityReportId], references: [id], onDelete: Cascade)
+
+  type              VulnerabilityType
+  severity          SeverityLevel
+  title             String
+  description       String             @db.Text
+
+  // Location
+  filePath          String?
+  lineNumber        Int?
+  codeSnippet       String?            @db.Text
+
+  // CVE info (if applicable)
+  cveId             String?
+  cvssScore         Float?
+
+  // Package info (for dependency vulnerabilities)
+  packageName       String?
+  packageVersion    String?
+  fixedVersion      String?
+
+  // OWASP categorization
+  owaspCategory     String?
+
+  // CWE (Common Weakness Enumeration)
+  cweId             String?
+
+  resolved          Boolean            @default(false)
+
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  @@map("vulnerabilities")
+}
+
+model DependencyRisk {
+  id                String          @id @default(cuid())
+  securityReportId  String
+  securityReport    SecurityReport  @relation(fields: [securityReportId], references: [id], onDelete: Cascade)
+
+  packageName       String
+  packageVersion    String
+  packageManager    String          // npm, pip, composer, bundler, etc.
+
+  // Risk factors
+  isDeprecated      Boolean         @default(false)
+  hasVulnerabilities Boolean        @default(false)
+  lastUpdateDate    DateTime?
+  maintainerCount   Int?
+  downloadCount     Int?
+
+  // License info
+  license           String?
+  licenseRisk       SeverityLevel   @default(LOW)
+
+  // Supply chain risk
+  directDependency  Boolean         @default(true)
+  dependencyDepth   Int             @default(0)
+
+  // Typosquatting / malicious package detection
+  suspiciousScore   Int             @default(0) // 0-100
+
+  riskLevel         SeverityLevel
+
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  @@map("dependency_risks")
+}
+
+model SecurityRecommendation {
+  id                String          @id @default(cuid())
+  securityReportId  String
+  securityReport    SecurityReport  @relation(fields: [securityReportId], references: [id], onDelete: Cascade)
+
+  severity          SeverityLevel
+  category          String          // e.g., "Dependency Update", "Code Fix", "Configuration"
+  title             String
+  description       String          @db.Text
+
+  // Actionable steps
+  steps             String[]
+
+  // Related items
+  relatedVulnerabilityIds String[]  // IDs of related vulnerabilities
+
+  // Effort estimation
+  estimatedEffort   String?         // e.g., "5 minutes", "1 hour", "1 day"
+
+  // Priority (1-10)
+  priority          Int             @default(5)
+
+  implemented       Boolean         @default(false)
+
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  @@map("security_recommendations")
+}
