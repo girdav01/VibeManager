@@ -38,6 +38,37 @@ enum TaskStatus {
   DONE
 }
 
+enum SeverityLevel {
+  CRITICAL
+  HIGH
+  MEDIUM
+  LOW
+  INFO
+}
+
+enum VulnerabilityType {
+  DEPENDENCY
+  CODE_INJECTION
+  XSS
+  SQL_INJECTION
+  PATH_TRAVERSAL
+  INSECURE_DESERIALIZATION
+  AUTHENTICATION
+  AUTHORIZATION
+  CRYPTOGRAPHY
+  SECRETS_EXPOSURE
+  MISCONFIGURATION
+  SUPPLY_CHAIN
+  OTHER
+}
+
+enum SecurityStatus {
+  PENDING
+  SCANNING
+  COMPLETED
+  FAILED
+}
+
 model User {
   id            String    @id @default(cuid())
   email         String    @unique
@@ -128,6 +159,9 @@ model Repo {
   lastIngestedAt  DateTime?
   lastCommitSha   String?
   knowledgeBase   Json?     // Structured analysis of codebase
+
+  // Security
+  securityReports SecurityReport[]
 
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
@@ -225,4 +259,141 @@ model DriftDetection {
   resolved      Boolean  @default(false)
 
   @@map("drift_detections")
+}
+
+model SecurityReport {
+  id                String          @id @default(cuid())
+  repoId            String
+  repo              Repo            @relation(fields: [repoId], references: [id], onDelete: Cascade)
+
+  commitSha         String
+  scanDate          DateTime        @default(now())
+  status            SecurityStatus  @default(PENDING)
+
+  // Summary
+  totalVulnerabilities    Int       @default(0)
+  criticalCount           Int       @default(0)
+  highCount               Int       @default(0)
+  mediumCount             Int       @default(0)
+  lowCount                Int       @default(0)
+
+  // Overall risk score (0-100)
+  riskScore               Int       @default(0)
+
+  // Scan results
+  vulnerabilities         Vulnerability[]
+  dependencyRisks         DependencyRisk[]
+  recommendations         SecurityRecommendation[]
+
+  // Metadata
+  scanDuration            Int?      // milliseconds
+  errorMessage            String?   @db.Text
+
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+
+  @@map("security_reports")
+}
+
+model Vulnerability {
+  id                String             @id @default(cuid())
+  securityReportId  String
+  securityReport    SecurityReport     @relation(fields: [securityReportId], references: [id], onDelete: Cascade)
+
+  type              VulnerabilityType
+  severity          SeverityLevel
+  title             String
+  description       String             @db.Text
+
+  // Location
+  filePath          String?
+  lineNumber        Int?
+  codeSnippet       String?            @db.Text
+
+  // CVE info (if applicable)
+  cveId             String?
+  cvssScore         Float?
+
+  // Package info (for dependency vulnerabilities)
+  packageName       String?
+  packageVersion    String?
+  fixedVersion      String?
+
+  // OWASP categorization
+  owaspCategory     String?
+
+  // CWE (Common Weakness Enumeration)
+  cweId             String?
+
+  resolved          Boolean            @default(false)
+
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  @@map("vulnerabilities")
+}
+
+model DependencyRisk {
+  id                String          @id @default(cuid())
+  securityReportId  String
+  securityReport    SecurityReport  @relation(fields: [securityReportId], references: [id], onDelete: Cascade)
+
+  packageName       String
+  packageVersion    String
+  packageManager    String          // npm, pip, composer, bundler, etc.
+
+  // Risk factors
+  isDeprecated      Boolean         @default(false)
+  hasVulnerabilities Boolean        @default(false)
+  lastUpdateDate    DateTime?
+  maintainerCount   Int?
+  downloadCount     Int?
+
+  // License info
+  license           String?
+  licenseRisk       SeverityLevel   @default(LOW)
+
+  // Supply chain risk
+  directDependency  Boolean         @default(true)
+  dependencyDepth   Int             @default(0)
+
+  // Typosquatting / malicious package detection
+  suspiciousScore   Int             @default(0) // 0-100
+
+  riskLevel         SeverityLevel
+
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  @@map("dependency_risks")
+}
+
+model SecurityRecommendation {
+  id                String          @id @default(cuid())
+  securityReportId  String
+  securityReport    SecurityReport  @relation(fields: [securityReportId], references: [id], onDelete: Cascade)
+
+  severity          SeverityLevel
+  category          String          // e.g., "Dependency Update", "Code Fix", "Configuration"
+  title             String
+  description       String          @db.Text
+
+  // Actionable steps
+  steps             String[]
+
+  // Related items
+  relatedVulnerabilityIds String[]  // IDs of related vulnerabilities
+
+  // Effort estimation
+  estimatedEffort   String?         // e.g., "5 minutes", "1 hour", "1 day"
+
+  // Priority (1-10)
+  priority          Int             @default(5)
+
+  implemented       Boolean         @default(false)
+
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  @@map("security_recommendations")
 }

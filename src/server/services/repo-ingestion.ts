@@ -4,6 +4,7 @@ import fs from "fs/promises";
 import { db } from "@/server/db";
 import { frameworkDetector } from "./framework-detector";
 import { codeAnalyzer } from "./code-analyzer";
+import { securityAnalysisService } from "./security-analysis";
 
 interface KnowledgeBase {
   framework: string;
@@ -20,7 +21,9 @@ interface KnowledgeBase {
 class RepoIngestionService {
   private reposDir = path.join(process.cwd(), "tmp", "repos");
 
-  async ingestRepo(repoId: string): Promise<void> {
+  async ingestRepo(repoId: string, options: { runSecurityScan?: boolean } = {}): Promise<void> {
+    const { runSecurityScan = true } = options;
+
     const repo = await db.repo.findUnique({ where: { id: repoId } });
     if (!repo) {
       throw new Error("Repository not found");
@@ -52,6 +55,17 @@ class RepoIngestionService {
           lastCommitSha: commitSha,
         },
       });
+
+      // Run security analysis if enabled
+      if (runSecurityScan && commitSha) {
+        console.log(`Running security analysis for repo ${repoId}...`);
+        await securityAnalysisService.analyzeSecurity(
+          repoId,
+          repoPath,
+          commitSha
+        );
+        console.log(`Security analysis completed for repo ${repoId}`);
+      }
 
       // Clean up
       await fs.rm(repoPath, { recursive: true, force: true });
