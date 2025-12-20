@@ -16,7 +16,7 @@ A CodeSpring-like web application for non-technical founders to plan full-stack 
 - **Frontend**: Next.js 15, React 19, TypeScript, Tailwind CSS
 - **Backend**: tRPC, Prisma, PostgreSQL
 - **Auth**: NextAuth.js v5 with GitHub OAuth
-- **AI**: OpenAI GPT-4
+- **AI**: Ollama (gpt-oss:20b) - *migrated from OpenAI GPT-4*
 - **Code Analysis**: Tree-sitter
 - **UI Components**: shadcn/ui, React Flow
 
@@ -27,7 +27,7 @@ A CodeSpring-like web application for non-technical founders to plan full-stack 
 - Node.js 18+
 - PostgreSQL database
 - GitHub OAuth App (for authentication)
-- OpenAI API key
+- **Ollama** with gpt-oss:20b model (see [Ollama Setup](#ollama-setup))
 
 ### Installation
 
@@ -104,6 +104,85 @@ VibeManager/
 1. After coding changes, trigger drift detection
 2. Review differences between PRD and code
 3. Update PRDs or create follow-up tasks
+
+## Ollama Setup
+
+VibeManager now uses **Ollama** for AI functionality instead of OpenAI. This provides cost-effective, private, and offline-capable AI processing.
+
+### Quick Setup
+
+Run the automated setup script:
+
+```bash
+./setup-ollama.sh
+```
+
+This script will:
+1. Install Ollama (if not already installed)
+2. Start the Ollama service
+3. Pull the gpt-oss:20b model (~11GB download)
+4. Test the integration
+
+### Manual Setup
+
+If you prefer manual installation:
+
+1. **Install Ollama**:
+   ```bash
+   # Linux
+   curl -fsSL https://ollama.com/install.sh | sh
+   
+   # macOS
+   brew install ollama
+   ```
+
+2. **Start Ollama service**:
+   ```bash
+   ollama serve &
+   ```
+
+3. **Pull the model**:
+   ```bash
+   ollama pull gpt-oss:20b
+   ```
+
+4. **Test the integration**:
+   ```bash
+   node test-ollama.js
+   ```
+
+### Configuration
+
+The `.env` file includes Ollama configuration:
+
+```env
+OLLAMA_BASE_URL="http://localhost:11434/v1"
+OLLAMA_MODEL="gpt-oss:20b"
+OLLAMA_API_KEY="ollama"
+```
+
+### Using a Different Model
+
+To use a different Ollama model:
+
+1. Pull the model: `ollama pull <model-name>`
+2. Update `OLLAMA_MODEL` in `.env`
+
+Popular alternatives:
+- `llama2:13b` - Smaller, faster
+- `llama2:70b` - Larger, higher quality
+- `mistral:7b` - Efficient, good quality
+
+### Troubleshooting
+
+If you encounter issues, see the detailed [OLLAMA_MIGRATION.md](./OLLAMA_MIGRATION.md) guide.
+
+Common issues:
+- **Ollama not accessible**: Ensure Ollama is running (`ollama serve &`)
+- **Model not found**: Pull the model (`ollama pull gpt-oss:20b`)
+- **Slow responses**: Consider using a smaller model or enabling GPU acceleration
+
+---
 
 ## Development
 
