@@ -1,8 +1,11 @@
 import OpenAI from "openai";
 import { db } from "@/server/db";
 
+// Configure for Ollama instead of OpenAI
+// Ollama provides an OpenAI-compatible API endpoint
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
+  baseURL: process.env.OLLAMA_BASE_URL || "http://localhost:11434/v1",
+  apiKey: process.env.OLLAMA_API_KEY || "ollama", // Ollama doesn't require an API key, but the SDK needs a value
 });
 
 interface MindmapNode {
@@ -78,7 +81,7 @@ Format:
 Keep it practical and focused. Maximum 15-20 nodes.`;
 
     const response = await openai.chat.completions.create({
-      model: "gpt-4",
+      model: process.env.OLLAMA_MODEL || "gpt-oss:20b",
       messages: [{ role: "user", content: prompt }],
       temperature: 0.7,
       response_format: { type: "json_object" },
@@ -185,7 +188,7 @@ Return valid JSON matching this structure:
 }`;
 
     const response = await openai.chat.completions.create({
-      model: "gpt-4",
+      model: process.env.OLLAMA_MODEL || "gpt-oss:20b",
       messages: [{ role: "user", content: prompt }],
       temperature: 0.5,
       response_format: { type: "json_object" },
